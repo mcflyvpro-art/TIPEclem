@@ -188,12 +188,12 @@ with tab2:
 # ──────────────────────────────────────────────────────────────────────────────
 with tab3:
     st.subheader("Expérience 3 — Effet de l'oxygène")
-    st.info("pH 3,5 fixe. Bécher ouvert (aéré) vs fermé sous N₂ (désaéré). Mesures à t = 0, 6, 12, 24 h.")
+    st.info("pH 3,5 fixe. Bécher ouvert (aéré) vs fermé sous N₂ (désaéré). Mesures à t = 0, 30, 60, 90, 120, 180, 240 min.")
 
     df3 = st.data_editor(pd.DataFrame({
         "t (min)":               [0,30,60,90,120,180,240],
-        "V moy OUVERT (mL)":   [None]*4,
-        "V moy FERMÉ N₂ (mL)": [None]*4,
+        "V moy OUVERT (mL)":   [None]*7,
+        "V moy FERMÉ N₂ (mL)": [None]*7,
     }), num_rows="fixed", use_container_width=True, key="e3",
     column_config={
         "t (min)": st.column_config.NumberColumn(disabled=True),
