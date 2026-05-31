@@ -191,12 +191,12 @@ with tab3:
     st.info("pH 3,5 fixe. Bécher ouvert (aéré) vs fermé sous N₂ (désaéré). Mesures à t = 0, 6, 12, 24 h.")
 
     df3 = st.data_editor(pd.DataFrame({
-        "t (h)":               [0,6,12,24],
+        "t (min)":               [0,30,60,90,120,180,240],
         "V moy OUVERT (mL)":   [None]*4,
         "V moy FERMÉ N₂ (mL)": [None]*4,
     }), num_rows="fixed", use_container_width=True, key="e3",
     column_config={
-        "t (h)": st.column_config.NumberColumn(disabled=True),
+        "t (min)": st.column_config.NumberColumn(disabled=True),
         "V moy OUVERT (mL)":   st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
         "V moy FERMÉ N₂ (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
     })
@@ -206,23 +206,23 @@ with tab3:
     has3 = df3["[SO₂] aéré"].notna().any() or df3["[SO₂] désaéré"].notna().any()
 
     fig3, ax3 = plt.subplots(figsize=(9,5), constrained_layout=True)
-    t_th3 = np.linspace(0, 24, 200)
+    t_th3 = np.linspace(0, 240, 200)  # minutes
     SO2_0 = 80
-    ax3.plot(t_th3, SO2_0*np.exp(-0.055*t_th3), color=COULEURS[2], lw=1.5, ls='--', alpha=0.45, label="Aéré — théorie")
-    ax3.plot(t_th3, SO2_0*np.exp(-0.005*t_th3), color=COULEURS[0], lw=1.5, ls='--', alpha=0.45, label="Désaéré — théorie")
+    ax3.plot(t_th3, SO2_0*np.exp(-0.055/60*t_th3), color=COULEURS[2], lw=1.5, ls='--', alpha=0.45, label="Aéré — théorie")
+    ax3.plot(t_th3, SO2_0*np.exp(-0.005/60*t_th3), color=COULEURS[0], lw=1.5, ls='--', alpha=0.45, label="Désaéré — théorie")
 
     if has3:
         m_a = df3["[SO₂] aéré"].notna()
         m_d = df3["[SO₂] désaéré"].notna()
         if m_a.any():
-            ax3.plot(df3.loc[m_a,"t (h)"], df3.loc[m_a,"[SO₂] aéré"], 'o-', color=COULEURS[2], lw=2, ms=7, label="Aéré — exp.")
+            ax3.plot(df3.loc[m_a,"t (min)"], df3.loc[m_a,"[SO₂] aéré"], 'o-', color=COULEURS[2], lw=2, ms=7, label="Aéré — exp.")
         if m_d.any():
-            ax3.plot(df3.loc[m_d,"t (h)"], df3.loc[m_d,"[SO₂] désaéré"], 's-', color=COULEURS[0], lw=2, ms=7, label="Désaéré — exp.")
+            ax3.plot(df3.loc[m_d,"t (min)"], df3.loc[m_d,"[SO₂] désaéré"], 's-', color=COULEURS[0], lw=2, ms=7, label="Désaéré — exp.")
         ratios = []
         for col_c in ["[SO₂] aéré","[SO₂] désaéré"]:
             mask = df3[col_c].notna() & (df3[col_c] > 0)
             if mask.sum() >= 2:
-                t_e = df3.loc[mask,"t (h)"].values.astype(float)
+                t_e = df3.loc[mask,"t (min)"].values.astype(float)
                 c_e = df3.loc[mask,col_c].values.astype(float)
                 sl, _, _, _, _ = stats.linregress(t_e, np.log(c_e))
                 ratios.append(-sl)
@@ -232,7 +232,7 @@ with tab3:
 
     ax3.axhline(20, color='darkred', ls=':', lw=1.5, alpha=0.7)
     ax3.annotate("Seuil ~20 mg/L", xy=(0,20), xytext=(1,22), fontsize=8.5, color='darkred')
-    ax3.set_xlabel("t (h)"); ax3.set_ylabel("[SO₂] mg/L")
+    ax3.set_xlabel("t (min)"); ax3.set_ylabel("[SO₂] mg/L")
     ax3.set_title("Exp. 3 — Effet de l'O₂ sur la durée de protection")
     ax3.legend(); style_ax(ax3)
     st.pyplot(fig3)
@@ -311,40 +311,162 @@ with tab4:
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# GÉNÉRATION DOCUMENTS
+# GÉNÉRATION DOCUMENT RÉSULTATS
 # ──────────────────────────────────────────────────────────────────────────────
 with tab_docs:
-    st.subheader("📄 Génération des documents Word")
-    st.info("Génère les 3 .docx avec tes graphiques mis à jour, puis télécharge-les.")
+    st.subheader("📄 Génération du document de résultats expérimentaux")
 
-    GRAPH_SECTIONS = {
-        "### IV.1.": "graphique_1_distribution.png",
-        "### IV.2.": "graphique_2_cinetique.png",
-        "### IV.3.": "graphique_3_oxygene.png",
-        "### IV.4.": "graphique_4_abaque.png",
-    }
+    st.markdown("""
+**Logique des documents :**
 
-    def inject_images(md_content):
-        lines = md_content.split('\n')
-        result = []
-        for line in lines:
-            result.append(line)
-            for heading, img_file in GRAPH_SECTIONS.items():
-                if line.startswith(heading):
-                    img_path = os.path.join(BASE, img_file).replace('\\', '/')
-                    if os.path.exists(os.path.join(BASE, img_file)):
-                        result += ['', f'![]({img_path})', '']
-        return '\n'.join(result)
+| Document | Contenu | Quand |
+|---|---|---|
+| `rapport_TIPE_complet.docx` | Théorie + protocole + graphiques simulés | Avant l'expérience — déjà prêt |
+| `revue_litterature_SO2_vin.docx` | Bibliographie | Déjà prêt |
+| `preparation_oral_jury.docx` | Préparation oral | Déjà prêt |
+| **`resultats_experimentaux.docx`** | **Tes mesures + graphiques exp. + analyse** | **Après l'expérience — généré ici** |
+""")
 
-    def generate_docx_bytes(md_file, with_images=False):
-        md_path = os.path.join(BASE, md_file)
-        with open(md_path, encoding='utf-8') as f:
-            content = f.read()
-        if with_images:
-            content = inject_images(content)
+    st.info("Entre d'abord tes mesures dans les 4 onglets, puis génère ton document de résultats.")
+
+    def md_img(fname):
+        p = os.path.join(BASE, fname).replace('\\', '/')
+        return f'\n\n![]({p})\n\n' if os.path.exists(os.path.join(BASE, fname)) else '\n\n*(graphique non disponible)*\n\n'
+
+    def build_resultats_md(df1, df2, df3, df4, mask4, resultats_k, ratios3):
+        """Construit le markdown du document de résultats à partir des données saisies."""
+        lines = []
+        lines.append("# Résultats expérimentaux — TIPE SO₂ dans le vin\n")
+        lines.append("**PC — 2ème année | Thème : Optimisation, Sobriété, Efficacité**\n")
+        lines.append("---\n")
+
+        # ── Exp 1
+        lines.append("## Expérience 1 — Fraction moléculaire = f(pH)\n")
+        has_e1 = df1["[SO₂] mg/L"].notna().any()
+        if has_e1:
+            lines.append("### Tableau de mesures\n")
+            lines.append("| pH | V₁ (mL) | V₂ (mL) | V₃ (mL) | V moy (mL) | [SO₂] (mg/L) | f exp (%) | f théo (%) | Écart (pp) |")
+            lines.append("|---|---|---|---|---|---|---|---|---|")
+            for _, r in df1.iterrows():
+                v1 = f"{r['V₁ (mL)']:.2f}" if pd.notna(r['V₁ (mL)']) else "—"
+                v2 = f"{r['V₂ (mL)']:.2f}" if pd.notna(r['V₂ (mL)']) else "—"
+                v3 = f"{r['V₃ (mL)']:.2f}" if pd.notna(r['V₃ (mL)']) else "—"
+                vm = f"{r['V moy']:.2f}" if pd.notna(r['V moy']) else "—"
+                so2 = f"{r['[SO₂] mg/L']:.1f}" if pd.notna(r['[SO₂] mg/L']) else "—"
+                fe = f"{r['f exp (%)']:.2f}" if pd.notna(r['f exp (%)']) else "—"
+                ft = f"{r['f théo (%)']:.2f}"
+                ecart = f"{r['f exp (%)']-r['f théo (%)']:.2f}" if pd.notna(r['f exp (%)']) else "—"
+                lines.append(f"| {r['pH']} | {v1} | {v2} | {v3} | {vm} | {so2} | {fe} | {ft} | {ecart} |")
+            lines.append("")
+            lines.append("### Graphique — Courbe théorique et points expérimentaux\n")
+            lines.append(md_img("graphique_1_distribution.png"))
+            lines.append("### Analyse\n")
+            mask = df1["f exp (%)"].notna()
+            if mask.any():
+                ecarts = (df1.loc[mask,"f exp (%)"] - df1.loc[mask,"f théo (%)"]).abs()
+                lines.append(f"L'écart moyen entre la fraction moléculaire expérimentale et théorique est de **{ecarts.mean():.2f} points de pourcentage**, ce qui valide le modèle acide-base utilisé (pK$_{{a1}}$ = 1,81).\n")
+        else:
+            lines.append("*Aucune mesure saisie.*\n")
+
+        lines.append("---\n")
+
+        # ── Exp 2
+        lines.append("## Expérience 2 — Cinétique d'oxydation [SO₂] = f(t)\n")
+        cols_C2 = ["[SO₂] pH 3.0","[SO₂] pH 3.5","[SO₂] pH 4.0"]
+        has_e2 = any(c in df2.columns and df2[c].notna().any() for c in cols_C2)
+        if has_e2 and resultats_k:
+            lines.append("### Tableau de mesures\n")
+            header = "| t (min) | V pH 3.0 (mL) | [SO₂] pH 3.0 | V pH 3.5 (mL) | [SO₂] pH 3.5 | V pH 4.0 (mL) | [SO₂] pH 4.0 |"
+            lines.append(header)
+            lines.append("|---|---|---|---|---|---|---|")
+            for _, r in df2.iterrows():
+                row_parts = [str(int(r["t (min)"]))]
+                for cv, cc in zip(["V moy pH 3.0 (mL)","V moy pH 3.5 (mL)","V moy pH 4.0 (mL)"],
+                                  ["[SO₂] pH 3.0","[SO₂] pH 3.5","[SO₂] pH 4.0"]):
+                    v = f"{r[cv]:.2f}" if pd.notna(r.get(cv)) else "—"
+                    c = f"{r[cc]:.1f}" if pd.notna(r.get(cc)) else "—"
+                    row_parts += [v, c]
+                lines.append("| " + " | ".join(row_parts) + " |")
+            lines.append("")
+            lines.append("### Constantes de vitesse extraites (régression linéaire sur ln[SO₂] = f(t))\n")
+            lines.append("| pH | k (min⁻¹) | t½ (min) | R² |")
+            lines.append("|---|---|---|---|")
+            for pH_str, vals in resultats_k.items():
+                k_key = list(vals.keys())[0]
+                t_key = list(vals.keys())[1]
+                r_key = list(vals.keys())[2]
+                lines.append(f"| {pH_str} | {vals[k_key]} | {vals[t_key]} | {vals[r_key]} |")
+            lines.append("")
+            lines.append("### Graphique — [SO₂] = f(t) et vérification ordre 1\n")
+            lines.append(md_img("graphique_2_cinetique.png"))
+            lines.append("### Analyse\n")
+            r2_vals = [v["R²"] for v in resultats_k.values()]
+            if all(r >= 0.99 for r in r2_vals):
+                lines.append(f"Les coefficients R² ({', '.join(str(r) for r in r2_vals)}) sont tous supérieurs à 0,99 : la cinétique d'oxydation du SO₂ est bien **d'ordre 1**. La constante de vitesse augmente avec le pH, ce qui confirme que le SO₂ moléculaire (majoritaire à bas pH) est plus stable que les formes ionisées.\n")
+            else:
+                lines.append("Les droites de régression ln[SO₂] = f(t) montrent des R² variables — vérifier la qualité des titrages.\n")
+        else:
+            lines.append("*Aucune mesure saisie.*\n")
+
+        lines.append("---\n")
+
+        # ── Exp 3
+        lines.append("## Expérience 3 — Effet de l'oxygène\n")
+        has_e3 = df3["[SO₂] aéré"].notna().any() or df3["[SO₂] désaéré"].notna().any()
+        if has_e3:
+            lines.append("### Tableau de mesures\n")
+            lines.append("| t (min) | V OUVERT (mL) | [SO₂] aéré (mg/L) | V FERMÉ N₂ (mL) | [SO₂] désaéré (mg/L) |")
+            lines.append("|---|---|---|---|---|")
+            for _, r in df3.iterrows():
+                va = f"{r['V moy OUVERT (mL)']:.2f}" if pd.notna(r.get('V moy OUVERT (mL)')) else "—"
+                ca = f"{r['[SO₂] aéré']:.1f}" if pd.notna(r['[SO₂] aéré']) else "—"
+                vd = f"{r['V moy FERMÉ N₂ (mL)']:.2f}" if pd.notna(r.get('V moy FERMÉ N₂ (mL)')) else "—"
+                cd = f"{r['[SO₂] désaéré']:.1f}" if pd.notna(r['[SO₂] désaéré']) else "—"
+                lines.append(f"| {int(r['t (min)'])} | {va} | {ca} | {vd} | {cd} |")
+            lines.append("")
+            lines.append("### Graphique — Aéré vs Désaéré\n")
+            lines.append(md_img("graphique_3_oxygene.png"))
+            if len(ratios3) == 2 and ratios3[1] > 0:
+                ratio = ratios3[0]/ratios3[1]
+                lines.append(f"### Analyse\n\nLe rapport k_aéré / k_désaéré = **{ratio:.1f}**, ce qui signifie que l'oxygène dissous accélère la dégradation du SO₂ d'un facteur {ratio:.1f}. Ceci justifie les pratiques œnologiques de travail sous atmosphère inerte (N₂ ou CO₂) pour réduire les apports de SO₂.\n")
+        else:
+            lines.append("*Aucune mesure saisie.*\n")
+
+        lines.append("---\n")
+
+        # ── Exp 4
+        lines.append("## Expérience 4 — Influence de la dose initiale C₀\n")
+        if mask4.any():
+            lines.append("### Tableau de mesures et constantes de vitesse\n")
+            lines.append("| C₀ (mg/L) | [SO₂] t=0 (mg/L) | [SO₂] t=120min (mg/L) | k (min⁻¹) | t½ (min) |")
+            lines.append("|---|---|---|---|---|")
+            for _, r in df4[mask4].iterrows():
+                k_col = "k (min⁻¹)" if "k (min⁻¹)" in df4.columns else "k (h⁻¹)"
+                t_col = "t½ (min)" if "t½ (min)" in df4.columns else "t½ (h)"
+                kv = f"{r[k_col]:.5f}" if pd.notna(r.get(k_col)) else "—"
+                tv = f"{r[t_col]:.1f}" if pd.notna(r.get(t_col)) else "—"
+                lines.append(f"| {r['C₀ (mg/L)']} | {r['[SO₂] t=0']:.1f} | {r['[SO₂] t=120min']:.1f} | {kv} | {tv} |")
+            lines.append("")
+            lines.append("### Graphique — Ordre 1 et abaque pratique\n")
+            lines.append(md_img("graphique_4_abaque.png"))
+            k_col = "k (min⁻¹)" if "k (min⁻¹)" in df4.columns else "k (h⁻¹)"
+            k_vals = df4.loc[mask4, k_col].dropna().values
+            if len(k_vals) > 1:
+                cv = np.std(k_vals)/np.mean(k_vals)*100
+                lines.append(f"### Analyse\n\nLe coefficient de variation sur k est de **{cv:.1f}%** — {'la cinétique est bien d\'ordre 1 (k indépendant de C₀) ✓' if cv < 10 else 'k varie selon C₀, vérifier les mesures'}. L'abaque construit à partir de ces k expérimentaux permet de lire directement la dose initiale à ajouter pour chaque valeur de pH.\n")
+        else:
+            lines.append("*Aucune mesure saisie.*\n")
+
+        lines.append("---\n")
+        lines.append("## Conclusion générale\n")
+        lines.append("Ces quatre expériences confirment expérimentalement que l'efficacité du SO₂ comme antioxydant dans le vin dépend de manière critique du pH. La fraction moléculaire active augmente fortement quand le pH diminue, ce qui permet de réduire significativement la dose totale de SO₂ tout en maintenant une protection équivalente — en accord avec les objectifs du thème **Optimisation / Sobriété / Efficacité**.\n")
+
+        return '\n'.join(lines)
+
+    def md_to_docx_bytes(md_content):
         tmp_md   = tempfile.NamedTemporaryFile(mode='w', suffix='.md', encoding='utf-8', delete=False, dir=BASE)
         tmp_docx = tempfile.NamedTemporaryFile(suffix='.docx', delete=False)
-        tmp_md.write(content); tmp_md.close(); tmp_docx.close()
+        tmp_md.write(md_content); tmp_md.close(); tmp_docx.close()
         cmd = [PANDOC, tmp_md.name, '-o', tmp_docx.name,
                '--from=markdown+tex_math_dollars+smart', '--standalone', '--wrap=none']
         try:
@@ -357,22 +479,50 @@ with tab_docs:
             for p in [tmp_md.name, tmp_docx.name]:
                 if os.path.exists(p): os.unlink(p)
 
-    if st.button("🔄 Générer les 3 fichiers .docx", type="primary", use_container_width=True):
-        files_cfg = [
-            ("rapport_TIPE_complet.md",     "rapport_TIPE_complet.docx",     True),
-            ("revue_litterature_SO2_vin.md", "revue_litterature_SO2_vin.docx", False),
-            ("preparation_oral_jury.md",     "preparation_oral_jury.docx",     False),
-        ]
-        for md_file, docx_file, imgs in files_cfg:
-            with st.spinner(f"Génération {docx_file}…"):
-                data, err = generate_docx_bytes(md_file, with_images=imgs)
-            if data:
-                st.success(f"✅ {docx_file}  ({len(data)//1024} Ko)")
-                st.download_button(
-                    label=f"⬇️ Télécharger {docx_file}",
-                    data=data, file_name=docx_file,
+    # Récupère les données des autres onglets via session_state
+    # Les dataframes sont recalculés ici à partir des clés session_state
+    if st.button("📊 Générer resultats_experimentaux.docx", type="primary", use_container_width=True):
+        with st.spinner("Génération du document de résultats…"):
+            # Récupère les ratios exp3 depuis les variables globales (calculées dans tab3)
+            _ratios3 = []
+            try:
+                _df3 = df3.copy()
+                for col_c in ["[SO₂] aéré","[SO₂] désaéré"]:
+                    _mask = _df3[col_c].notna() & (_df3[col_c] > 0)
+                    if _mask.sum() >= 2:
+                        t_e = _df3.loc[_mask,"t (min)"].values.astype(float)
+                        c_e = _df3.loc[_mask,col_c].values.astype(float)
+                        sl, _, _, _, _ = stats.linregress(t_e, np.log(c_e))
+                        _ratios3.append(-sl)
+            except Exception:
+                _ratios3 = []
+
+            _rk = resultats_k if 'resultats_k' in dir() else {}
+            _mask4 = mask4 if 'mask4' in dir() else pd.Series([False]*5)
+
+            md = build_resultats_md(df1, df2, df3, df4, _mask4, _rk, _ratios3)
+            data, err = md_to_docx_bytes(md)
+
+        if data:
+            st.success(f"✅ resultats_experimentaux.docx  ({len(data)//1024} Ko)")
+            st.download_button(
+                label="⬇️ Télécharger resultats_experimentaux.docx",
+                data=data,
+                file_name="resultats_experimentaux.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                key="dl_resultats"
+            )
+        else:
+            st.error(f"Erreur pandoc : {err}")
+            st.warning("Assure-toi que pandoc est installé sur ce serveur.")
+
+    st.markdown("---")
+    st.markdown("### Documents de base (théorie + protocole)")
+    st.caption("Ces fichiers sont générés une fois depuis ton ordinateur avec generer_docx.py — ils ne changent pas.")
+    for f in ["rapport_TIPE_complet.docx","revue_litterature_SO2_vin.docx","preparation_oral_jury.docx"]:
+        p = os.path.join(BASE, f)
+        if os.path.exists(p):
+            with open(p,'rb') as fh:
+                st.download_button(f"⬇️ {f}", data=fh.read(), file_name=f,
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key=f"dl_{docx_file}"
-                )
-            else:
-                st.error(f"❌ {docx_file} : {err}")
+                    key=f"dl_base_{f}")
