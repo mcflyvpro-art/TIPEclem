@@ -25,7 +25,7 @@ st.caption("Saisie des mesures · Comparaison théorie/expérience · Générati
 # ─── Sidebar ─────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.header("⚙️ Protocole")
-    c_I2  = st.number_input("Concentration I₂ (mol/L)", value=0.020, step=0.001, format="%.3f")
+    c_I2  = st.number_input("Concentration I₂ (mol/L)", value=0.005, step=0.001, format="%.3f")
     V_ech = st.number_input("Volume échantillon (mL)",  value=20.0,  step=1.0)
     st.markdown("---")
     st.markdown("**Formule :**")
@@ -119,15 +119,15 @@ with tab2:
     st.subheader("Expérience 2 — Cinétique d'oxydation [SO₂] = f(t)")
     st.info("Volume d'I₂ moyen (moyenne de tes 3 titrages) à chaque temps, pour 3 pH.")
 
-    t_vals = list(range(0, 26, 2))
+    t_vals = [0, 30, 60, 90, 120, 180, 240]
     df2 = st.data_editor(pd.DataFrame({
-        "t (h)":              t_vals,
+        "t (min)":            t_vals,
         "V moy pH 3.0 (mL)": [None]*len(t_vals),
         "V moy pH 3.5 (mL)": [None]*len(t_vals),
         "V moy pH 4.0 (mL)": [None]*len(t_vals),
     }), num_rows="fixed", use_container_width=True, key="e2",
     column_config={
-        "t (h)": st.column_config.NumberColumn(disabled=True),
+        "t (min)": st.column_config.NumberColumn(disabled=True),
         "V moy pH 3.0 (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
         "V moy pH 3.5 (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
         "V moy pH 4.0 (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
@@ -136,7 +136,7 @@ with tab2:
     cols_V = ["V moy pH 3.0 (mL)","V moy pH 3.5 (mL)","V moy pH 4.0 (mL)"]
     cols_C = ["[SO₂] pH 3.0","[SO₂] pH 3.5","[SO₂] pH 4.0"]
     pH_labels = ["3.0","3.5","4.0"]
-    k_th = {3.0:0.008, 3.5:0.018, 4.0:0.035}
+    k_th = {3.0:0.008/60, 3.5:0.018/60, 4.0:0.035/60}  # convertis en min⁻¹
     SO2_0_th = 80
 
     for cv, cc in zip(cols_V, cols_C):
@@ -144,7 +144,7 @@ with tab2:
     has2 = any(df2[c].notna().any() for c in cols_C)
 
     fig2, (ax_c, ax_ln) = plt.subplots(1, 2, figsize=(13,5), constrained_layout=True)
-    t_th = np.linspace(0, 24, 200)
+    t_th = np.linspace(0, 240, 200)  # en minutes
 
     for i, (pH_str, pH_val) in enumerate(zip(pH_labels, [3.0,3.5,4.0])):
         k = k_th[pH_val]
@@ -156,21 +156,21 @@ with tab2:
         for i, (cc, pH_str) in enumerate(zip(cols_C, pH_labels)):
             mask = df2[cc].notna() & (df2[cc] > 0)
             if mask.sum() >= 2:
-                t_e = df2.loc[mask,"t (h)"].values.astype(float)
+                t_e = df2.loc[mask,"t (min)"].values.astype(float)
                 c_e = df2.loc[mask, cc].values.astype(float)
                 ax_c.scatter(t_e, c_e, color=COULEURS[i], s=50, zorder=5, label=f'pH {pH_str} exp.')
                 sl, ic, r, _, _ = stats.linregress(t_e, np.log(c_e))
                 k_exp = -sl
-                resultats_k[pH_str] = {"k (h⁻¹)": round(k_exp,4), "t½ (h)": round(np.log(2)/k_exp,1), "R²": round(r**2,4)}
+                resultats_k[pH_str] = {"k (min⁻¹)": round(k_exp,5), "t½ (min)": round(np.log(2)/k_exp,1), "R²": round(r**2,4)}
                 ax_ln.scatter(t_e, np.log(c_e), color=COULEURS[i], s=50, zorder=5)
                 t_fit = np.linspace(t_e.min(), t_e.max(), 100)
                 ax_ln.plot(t_fit, sl*t_fit+ic, color=COULEURS[i], lw=2,
                            label=f'pH {pH_str}  k={k_exp:.4f}  R²={r**2:.4f}')
 
     ax_c.axhline(10, color='red', ls='-.', lw=1, alpha=0.7, label='Seuil 10 mg/L')
-    ax_c.set_xlabel("t (h)"); ax_c.set_ylabel("[SO₂] mg/L"); ax_c.set_title("[SO₂] = f(t)")
+    ax_c.set_xlabel("t (min)"); ax_c.set_ylabel("[SO₂] mg/L"); ax_c.set_title("[SO₂] = f(t)")
     ax_c.legend(fontsize=8); style_ax(ax_c)
-    ax_ln.set_xlabel("t (h)"); ax_ln.set_ylabel("ln[SO₂]"); ax_ln.set_title("Vérification ordre 1")
+    ax_ln.set_xlabel("t (min)"); ax_ln.set_ylabel("ln[SO₂]"); ax_ln.set_title("Vérification ordre 1")
     style_ax(ax_ln)
     if has2: ax_ln.legend(fontsize=8)
     st.pyplot(fig2)
@@ -247,47 +247,47 @@ with tab3:
 # ──────────────────────────────────────────────────────────────────────────────
 with tab4:
     st.subheader("Expérience 4 — Influence de la dose initiale C₀")
-    st.info("pH 3,5 fixe. 3 doses (50, 100, 200 mg/L). Mesures à t=0 et t=12h. Si ordre 1 → k constant.")
+    st.info("pH 3,5 fixe. 5 doses (50/75/100/125/150 mg/L). Mesures à t=0 et t=2h (120 min). Si ordre 1 → k constant.")
 
     df4 = st.data_editor(pd.DataFrame({
-        "C₀ (mg/L)":        [50.0, 100.0, 200.0],
-        "V moy t=0 (mL)":   [None]*3,
-        "V moy t=12h (mL)": [None]*3,
+        "C₀ (mg/L)":          [50.0, 75.0, 100.0, 125.0, 150.0],
+        "V moy t=0 (mL)":     [None]*5,
+        "V moy t=120min (mL)": [None]*5,
     }), num_rows="fixed", use_container_width=True, key="e4",
     column_config={
         "C₀ (mg/L)": st.column_config.NumberColumn(disabled=True),
-        "V moy t=0 (mL)":   st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
-        "V moy t=12h (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
+        "V moy t=0 (mL)":      st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
+        "V moy t=120min (mL)": st.column_config.NumberColumn(min_value=0.0, step=0.05, format="%.2f"),
     })
 
-    df4["[SO₂] t=0"]   = df4["V moy t=0 (mL)"].apply(lambda v: calc_SO2(v) if pd.notna(v) else None)
-    df4["[SO₂] t=12h"] = df4["V moy t=12h (mL)"].apply(lambda v: calc_SO2(v) if pd.notna(v) else None)
-    mask4 = (df4["[SO₂] t=0"].notna() & df4["[SO₂] t=12h"].notna()
-             & (df4["[SO₂] t=0"] > 0) & (df4["[SO₂] t=12h"] > 0))
+    df4["[SO₂] t=0"]    = df4["V moy t=0 (mL)"].apply(lambda v: calc_SO2(v) if pd.notna(v) else None)
+    df4["[SO₂] t=120min"] = df4["V moy t=120min (mL)"].apply(lambda v: calc_SO2(v) if pd.notna(v) else None)
+    mask4 = (df4["[SO₂] t=0"].notna() & df4["[SO₂] t=120min"].notna()
+             & (df4["[SO₂] t=0"] > 0) & (df4["[SO₂] t=120min"] > 0))
 
     if mask4.any():
-        df4.loc[mask4,"k (h⁻¹)"] = df4.loc[mask4].apply(
-            lambda r: round(np.log(r["[SO₂] t=0"]/r["[SO₂] t=12h"])/12, 5), axis=1)
-        df4.loc[mask4,"t½ (h)"] = df4.loc[mask4,"k (h⁻¹)"].apply(
+        df4.loc[mask4,"k (min⁻¹)"] = df4.loc[mask4].apply(
+            lambda r: round(np.log(r["[SO₂] t=0"]/r["[SO₂] t=120min"])/120, 6), axis=1)
+        df4.loc[mask4,"t½ (min)"] = df4.loc[mask4,"k (min⁻¹)"].apply(
             lambda k: round(np.log(2)/k,1) if pd.notna(k) and k>0 else None)
-        st.dataframe(df4[["C₀ (mg/L)","[SO₂] t=0","[SO₂] t=12h","k (h⁻¹)","t½ (h)"]], hide_index=True)
+        st.dataframe(df4[["C₀ (mg/L)","[SO₂] t=0","[SO₂] t=120min","k (min⁻¹)","t½ (min)"]], hide_index=True)
 
-        k_vals = df4.loc[mask4,"k (h⁻¹)"].dropna().values
+        k_vals = df4.loc[mask4,"k (min⁻¹)"].dropna().values
         if len(k_vals) > 1:
             cv = np.std(k_vals)/np.mean(k_vals)*100
             (st.success if cv < 10 else st.warning)(f"k quasiment constant (CV = {cv:.1f}%) → ordre 1 {'vérifié ✓' if cv<10 else 'à vérifier'}")
 
         k_moyen = np.mean(k_vals)
-        t_th4 = np.linspace(0, 24, 200)
+        t_th4 = np.linspace(0, 240, 200)  # en minutes
         pH_ab = np.linspace(2.8, 4.5, 200)
 
         fig4, (ax4a, ax4b) = plt.subplots(1, 2, figsize=(14,5), constrained_layout=True)
         for i, (_, row) in enumerate(df4[mask4].iterrows()):
-            C0 = row["[SO₂] t=0"]; k = row["k (h⁻¹)"]
-            ax4a.plot(t_th4, C0*np.exp(-k*t_th4), color=COULEURS[i], lw=2,
-                      label=f"C₀={row['C₀ (mg/L)']} mg/L  k={k:.4f}")
-            ax4a.scatter([0,12],[row["[SO₂] t=0"],row["[SO₂] t=12h"]], color=COULEURS[i], s=60, zorder=5)
-        ax4a.set_xlabel("t (h)"); ax4a.set_ylabel("[SO₂] mg/L")
+            C0 = row["[SO₂] t=0"]; k = row["k (min⁻¹)"]
+            ax4a.plot(t_th4, C0*np.exp(-k*t_th4), color=COULEURS[i % len(COULEURS)], lw=2,
+                      label=f"C₀={row['C₀ (mg/L)']} mg/L  k={k:.5f}")
+            ax4a.scatter([0,120],[row["[SO₂] t=0"],row["[SO₂] t=120min"]], color=COULEURS[i % len(COULEURS)], s=60, zorder=5)
+        ax4a.set_xlabel("t (min)"); ax4a.set_ylabel("[SO₂] mg/L")
         ax4a.set_title("Vérification ordre 1 (k constant)"); ax4a.legend(); style_ax(ax4a)
 
         def k_app(pH):
@@ -297,7 +297,7 @@ with tab4:
         ax4b.axhline(200, color='firebrick', ls='-.', lw=1.5, alpha=0.8, label='Limite blancs 200 mg/L')
         ax4b.fill_between(pH_ab, 150, 350, alpha=0.08, color='red')
         ax4b.plot(pH_ab, dose, color=COULEURS[0], lw=2.5,
-                  label=f'Dose optimale (k exp. = {k_moyen:.4f} h⁻¹)')
+                  label=f'Dose optimale (k exp. = {k_moyen:.5f} min⁻¹)')
         ax4b.set_xlabel("pH"); ax4b.set_ylabel("Dose initiale (mg/L)")
         ax4b.set_title("Abaque pratique — Dose optimale vs pH")
         ax4b.set_xlim(2.8,4.5); ax4b.set_ylim(0,350); ax4b.legend(); style_ax(ax4b)
